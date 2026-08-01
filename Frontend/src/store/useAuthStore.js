@@ -36,8 +36,12 @@ export const useAuthStore = create((set, get) => ({
       toast.success("Account created successfully");
       get().connectSocket();
     } catch (error) {
-      toast.error(error.response.data.message);
-    } finally {
+  console.log(error);
+
+  toast.error(
+    error.response?.data?.message || error.message || "Something went wrong"
+  );
+} finally {
       set({ isSigningUp: false });
     }
   },
@@ -51,8 +55,12 @@ export const useAuthStore = create((set, get) => ({
 
       get().connectSocket();
     } catch (error) {
-      toast.error(error.response.data.message);
-    } finally {
+  console.log(error);
+
+  toast.error(
+    error.response?.data?.message || error.message || "Something went wrong"
+  );
+} finally {
       set({ isLoggingIn: false });
     }
   },
@@ -64,8 +72,12 @@ export const useAuthStore = create((set, get) => ({
       toast.success("Logged out successfully");
       get().disconnectSocket();
     } catch (error) {
-      toast.error(error.response.data.message);
-    }
+  console.log(error);
+
+  toast.error(
+    error.response?.data?.message || error.message || "Something went wrong"
+  );
+}
   },
 
   updateProfile: async (data) => {
@@ -75,9 +87,12 @@ export const useAuthStore = create((set, get) => ({
       set({ authUser: res.data });
       toast.success("Profile updated successfully");
     } catch (error) {
-      console.log("error in update profile:", error);
-      toast.error(error.response.data.message);
-    } finally {
+  console.log(error);
+
+  toast.error(
+    error.response?.data?.message || error.message || "Something went wrong"
+  );
+} finally {
       set({ isUpdatingProfile: false });
     }
   },

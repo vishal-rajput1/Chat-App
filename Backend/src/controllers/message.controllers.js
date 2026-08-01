@@ -68,3 +68,66 @@ export const sendMessage = async (req, res) => {
     res.status(500).json({ error: "Internal server error" });
   }
 };
+
+export const editMessage = async (req, res) => {
+  try {
+    const { text } = req.body;
+
+    const message = await Message.findById(req.params.id);
+
+    if (!message) {
+      return res.status(404).json({
+        message: "Message not found",
+      });
+    }
+
+    if (message.senderId.toString() !== req.user._id.toString()) {
+      return res.status(403).json({
+        message: "Unauthorized",
+      });
+    }
+
+    message.text = text;
+    message.edited = true;
+
+    await message.save();
+
+    res.status(200).json(message);
+  } catch (error) {
+    console.log("Edit Error:", error);
+    res.status(500).json({
+      message: error.message,
+    });
+  }
+};
+
+export const deleteMessage = async (req, res) => {
+  try {
+    const message = await Message.findById(req.params.id);
+
+    if (!message) {
+      return res.status(404).json({
+        message: "Message not found",
+      });
+    }
+
+    if (message.senderId.toString() !== req.user._id.toString()) {
+      return res.status(403).json({
+        message: "Unauthorized",
+      });
+    }
+
+    message.text = "This message was deleted";
+    message.image = "";
+    message.deleted = true;
+
+    await message.save();
+
+    res.status(200).json(message);
+  } catch (error) {
+    console.log("Delete Error:", error);
+    res.status(500).json({
+      message: error.message,
+    });
+  }
+};

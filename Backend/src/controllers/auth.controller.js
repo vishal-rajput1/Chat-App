@@ -87,24 +87,53 @@ export const logout = (req, res) => {
 
 export const updateProfile = async (req, res) => {
   try {
-    const { profilePic } = req.body;
+    const { fullName, email, profilePic } = req.body;
     const userId = req.user._id;
 
-    if (!profilePic) {
-      return res.status(400).json({ message: "Profile pic is required" });
+    // Find the current user
+    const user = await User.findById(userId);
+
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
     }
 
-    const uploadResponse = await cloudinary.uploader.upload(profilePic);
-    const updatedUser = await User.findByIdAndUpdate(
-      userId,
-      { profilePic: uploadResponse.secure_url },
-      { new: true }
-    );
+    // Update full name if provided
+    if (fullName) {
+      user.fullName = fullName;
+    }
 
-    res.status(200).json(updatedUser);
+    // Update email if provided
+    if (email) {
+      // Prevent duplicate emails
+      const existingUser = await User.findOne({
+        email,
+        _id: { $ne: userId },
+      });
+
+      if (existingUser) {
+        return res.status(400).json({
+          message: "Email already exists",
+        });
+      }
+
+      user.email = email;
+    }
+
+    // Update profile picture if provided
+    if (profilePic) {
+      const uploadResponse = await cloudinary.uploader.upload(profilePic);
+
+      user.profilePic = uploadResponse.secure_url;
+    }
+
+    await user.save();
+
+    res.status(200).json(user);
   } catch (error) {
-    console.log("error in update profile:", error);
-    res.status(500).json({ message: "Internal server error" });
+    console.log("Error in updateProfile:", error);
+    res.status(500).json({
+      message: "Internal Server Error",
+    });
   }
 };
 

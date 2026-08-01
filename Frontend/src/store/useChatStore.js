@@ -43,6 +43,25 @@ getMessages: async (userId) => {
     }
   },
 
+   editMessage: async (id, text) => {
+  const res = await axiosInstance.put(`/messages/${id}`, { text });
+
+  set((state) => ({
+    messages: state.messages.map((m) =>
+      m._id === id ? res.data : m
+    ),
+  }));
+},
+
+deleteMessage: async (id) => {
+  await axiosInstance.delete(`/messages/${id}`);
+
+  set((state) => ({
+    messages: state.messages.filter((m) => m._id !== id),
+  }));
+},
+
+
   subscribeToMessages: () => {
     const { selectedUser } = get();
     if (!selectedUser) return;
