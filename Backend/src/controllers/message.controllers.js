@@ -7,7 +7,10 @@ import { getReceiverSocketId, io } from "../lib/socket.js";
 export const getUsersForSidebar = async (req, res) => {
   try {
     const loggedInUserId = req.user._id;
-    const filteredUsers = await User.find({ _id: { $ne: loggedInUserId } }).select("-password");
+    const query = req.query.search?.trim();
+    const filter = { _id: { $ne: loggedInUserId } };
+    if (query) filter.username = { $regex: query, $options: "i" };
+    const filteredUsers = await User.find(filter).select("-password").sort({ username: 1 });
 
     res.status(200).json(filteredUsers);
   } catch (error) {
@@ -26,7 +29,12 @@ export const getMessages = async (req, res) => {
         { senderId: myId, receiverId: userToChatId },
         { senderId: userToChatId, receiverId: myId },
       ],
-    });
+    }).populate("replyTo", "text image audio senderId deleted");
+
+    await Message.updateMany({ senderId: userToChatId, receiverId: myId, seen: false }, { $set: { seen: true, delivered: true } });
+    const seenMessages = await Message.find({ senderId: userToChatId, receiverId: myId }).select("_id");
+    const senderSocketId = getReceiverSocketId(userToChatId);
+    if (senderSocketId && seenMessages.length) io.to(senderSocketId).emit("messagesSeen", seenMessages.map((item) => item._id.toString()));
 
     res.status(200).json(messages);
   } catch (error) {
@@ -37,7 +45,7 @@ export const getMessages = async (req, res) => {
 
 export const sendMessage = async (req, res) => {
   try {
-    const { text, image } = req.body;
+    const { text, image, audio, replyTo } = req.body;
     const { id: receiverId } = req.params;
     const senderId = req.user._id;
 
@@ -48,16 +56,24 @@ export const sendMessage = async (req, res) => {
       imageUrl = uploadResponse.secure_url;
     }
 
+    let audioUrl;
+    if (audio) {
+      const uploadResponse = await cloudinary.uploader.upload(audio, { resource_type: "video" });
+      audioUrl = uploadResponse.secure_url;
+    }
+    const receiverSocketId = getReceiverSocketId(receiverId);
     const newMessage = new Message({
       senderId,
       receiverId,
       text,
       image: imageUrl,
+      audio: audioUrl,
+      replyTo: replyTo || null,
+      delivered: Boolean(receiverSocketId),
     });
 
     await newMessage.save();
 
-    const receiverSocketId = getReceiverSocketId(receiverId);
     if (receiverSocketId) {
       io.to(receiverSocketId).emit("newMessage", newMessage);
     }
@@ -92,6 +108,9 @@ export const editMessage = async (req, res) => {
 
     await message.save();
 
+    const receiverSocketId = getReceiverSocketId(message.receiverId);
+    if (receiverSocketId) io.to(receiverSocketId).emit("messageUpdated", message);
+
     res.status(200).json(message);
   } catch (error) {
     console.log("Edit Error:", error);
@@ -123,6 +142,9 @@ export const deleteMessage = async (req, res) => {
 
     await message.save();
 
+    const receiverSocketId = getReceiverSocketId(message.receiverId);
+    if (receiverSocketId) io.to(receiverSocketId).emit("messageUpdated", message);
+
     res.status(200).json(message);
   } catch (error) {
     console.log("Delete Error:", error);
@@ -130,4 +152,20 @@ export const deleteMessage = async (req, res) => {
       message: error.message,
     });
   }
+};
+
+export const reactToMessage = async (req, res) => {
+  try {
+    const { emoji } = req.body;
+    const message = await Message.findById(req.params.id);
+    if (!message || !emoji) return res.status(404).json({ message: "Message or emoji not found" });
+    const userId = req.user._id;
+    const existing = message.reactions.findIndex((reaction) => reaction.userId.toString() === userId.toString() && reaction.emoji === emoji);
+    existing >= 0 ? message.reactions.splice(existing, 1) : message.reactions.push({ userId, emoji });
+    await message.save();
+    const peerId = message.senderId.toString() === userId.toString() ? message.receiverId : message.senderId;
+    const peerSocketId = getReceiverSocketId(peerId);
+    if (peerSocketId) io.to(peerSocketId).emit("messageUpdated", message);
+    res.json(message);
+  } catch (error) { res.status(500).json({ message: error.message }); }
 };

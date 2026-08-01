@@ -5,7 +5,7 @@ import MessageInput from "./MessageInput";
 import MessageSkeleton from "./skeletons/MessageSkeleton";
 import { useAuthStore } from "../store/useAuthStore";
 import { formatMessageTime } from "../lib/utils";
-import { MoreVertical, Pencil, Trash2 } from "lucide-react";
+import { Check, CheckCheck, CornerUpLeft, MoreVertical, Pencil, Smile, Trash2 } from "lucide-react";
 
 const ChatContainer = () => {
   const {
@@ -17,6 +17,10 @@ const ChatContainer = () => {
   unsubscribeFromMessages,
   editMessage,
   deleteMessage,
+  reactToMessage,
+  setReplyTo,
+  isTyping,
+  messageSearch,
 } = useChatStore();
   const { authUser } = useAuthStore();
   const messageEndRef = useRef(null);
@@ -57,12 +61,14 @@ const [text, setText] = useState("");
       <ChatHeader />
 
       <div className="flex-1 overflow-y-auto p-4 space-y-4">
-        {messages.map((message) => (
+        {messages.filter((message) => !messageSearch || message.text?.toLowerCase().includes(messageSearch.toLowerCase())).map((message) => (
           <div
-            key={message._id}
-            className={`chat ${message.senderId === authUser._id ? "chat-end" : "chat-start"}`}
-            ref={messageEndRef}
-          >
+  className={`chat group ${
+    message.senderId === authUser._id
+      ? "chat-end"
+      : "chat-start"
+  }`}
+>
             <div className=" chat-image avatar">
               <div className="size-10 rounded-full border">
                 <img
@@ -80,15 +86,19 @@ const [text, setText] = useState("");
                 {formatMessageTime(message.createdAt)}
               </time>
             </div>
-         <div className="chat-bubble relative flex flex-col">
-
+         <div className="chat-bubble relative flex flex-col max-w-xs sm:max-w-md">
+  {message.replyTo && <div className="mb-2 rounded border-l-2 border-primary bg-base-200/70 px-2 py-1 text-xs opacity-80">↩ {message.replyTo.deleted ? "This message was deleted" : message.replyTo.text || "Attachment"}</div>}
   {message.image && (
     <img
       src={message.image}
       alt="Attachment"
-      className="rounded-lg mb-2 max-w-[220px]"
+      className="rounded-lg mb-2 max-w-55"
     />
   )}
+
+  {message.audio && <audio controls src={message.audio} className="mt-1 max-w-full" />}
+  {message.reactions?.length > 0 && <div className="mt-1 flex flex-wrap gap-1">{Object.entries(message.reactions.reduce((all, reaction) => ({ ...all, [reaction.emoji]: (all[reaction.emoji] || 0) + 1 }), {})).map(([emoji, count]) => <button key={emoji} onClick={() => reactToMessage(message._id, emoji)} className="rounded-full bg-base-200 px-1.5 text-xs">{emoji} {count}</button>)}</div>}
+  <div className="mt-1 flex items-center gap-1 text-xs opacity-60"><button onClick={() => setReplyTo(message)} title="Reply"><CornerUpLeft size={14}/></button><button onClick={() => reactToMessage(message._id, "👍")} title="React"><Smile size={14}/></button>{message.senderId === authUser._id && (message.seen ? <CheckCheck size={15} className="text-primary"/> : message.delivered ? <CheckCheck size={15}/> : <Check size={15}/>)}</div>
 
   {message.deleted ? (
     <i className="text-sm opacity-60">
@@ -124,40 +134,41 @@ const [text, setText] = useState("");
     </>
   )}
 
-  {message.senderId === authUser._id && !message.deleted && (
-    <div className="dropdown dropdown-end absolute top-1 right-1">
-      <button
-        tabIndex={0}
-        className="btn btn-ghost btn-xs"
-      >
-        <MoreVertical size={16} />
-      </button>
+  {message.senderId === authUser._id && (
+  <div className="absolute top-1 right-1 dropdown dropdown-end">
+    <button
+      tabIndex={0}
+      className="btn btn-ghost btn-xs btn-circle opacity-0 hover:opacity-100 group-hover:opacity-100"
+    >
+      <MoreVertical size={15} />
+    </button>
 
-      <ul
-        tabIndex={0}
-        className="dropdown-content menu bg-base-100 rounded-box w-36 shadow-lg z-50"
-      >
-        <li>
-          <button onClick={() => handleEdit(message)}>
-            <Pencil size={14} />
-            Edit
-          </button>
-        </li>
+    <ul
+      tabIndex={0}
+      className="dropdown-content menu bg-base-100 rounded-box w-36 shadow-lg z-50"
+    >
+      <li>
+        <button onClick={() => handleEdit(message)}>
+          <Pencil size={14} />
+          Edit
+        </button>
+      </li>
 
-        <li>
-          <button onClick={() => deleteMessage(message._id)}>
-            <Trash2 size={14} />
-            Delete
-          </button>
-        </li>
-      </ul>
-    </div>
-  )}
+      <li>
+        <button onClick={() => deleteMessage(message._id)}>
+          <Trash2 size={14} />
+          Delete
+        </button>
+      </li>
+    </ul>
+  </div>
+)}
 
 </div>
           </div>
         ))}
       </div>
+      {isTyping && <div className="px-5 pb-1 text-xs italic text-base-content/60">@{selectedUser.username} is typing…</div>}
 
       <MessageInput />
     </div>

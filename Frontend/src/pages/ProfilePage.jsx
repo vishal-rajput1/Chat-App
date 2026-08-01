@@ -8,6 +8,7 @@ const ProfilePage = () => {
 
 const [formData, setFormData] = useState({
   fullName: authUser?.fullName || "",
+  username: authUser?.username || "",
   email: authUser?.email || "",
 });
 
@@ -21,6 +22,7 @@ const handleChange = (e) => {
 const handleSave = async () => {
   await updateProfile({
     fullName: formData.fullName,
+    username: formData.username,
     email: formData.email,
     profilePic: selectedImg || authUser.profilePic,
   });
@@ -90,7 +92,11 @@ const handleSave = async () => {
           </div>
 
           <div className="space-y-6">
-            <div className="space-y-1.5">
+              <div className="space-y-1.5">
+              <div className="text-sm text-zinc-400 flex items-center gap-2"><User className="w-4 h-4" />Username</div>
+              <input type="text" name="username" value={formData.username} onChange={handleChange} className="input input-bordered w-full" />
+              </div>
+              <div className="space-y-1.5">
               <div className="text-sm text-zinc-400 flex items-center gap-2">
                 <User className="w-4 h-4" />
                 Full Name

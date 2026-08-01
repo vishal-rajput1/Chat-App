@@ -2,11 +2,12 @@ import { generateToken } from "../lib/utils.js";
 import User from "../models/user.model.js";
 import bcrypt from "bcryptjs";
 import cloudinary from "../lib/cloudinary.js";
+import { sendLoginEmail } from "../lib/email.js";
 
 export const signup = async (req, res) => {
-  const { fullName, email, password } = req.body;
+  const { fullName, username, email, password } = req.body;
   try {
-    if (!fullName || !email || !password) {
+    if (!fullName || !username || !email || !password) {
       return res.status(400).json({ message: "All fields are required" });
     }
 
@@ -14,7 +15,8 @@ export const signup = async (req, res) => {
       return res.status(400).json({ message: "Password must be at least 6 characters" });
     }
 
-    const user = await User.findOne({ email });
+    const normalizedUsername = username.trim().toLowerCase();
+    const user = await User.findOne({ $or: [{ email: email.toLowerCase() }, { username: normalizedUsername }] });
 
     if (user) return res.status(400).json({ message: "Email already exists" });
 
@@ -23,7 +25,8 @@ export const signup = async (req, res) => {
 
     const newUser = new User({
       fullName,
-      email,
+      username: normalizedUsername,
+      email: email.toLowerCase(),
       password: hashedPassword,
     });
 
@@ -35,6 +38,7 @@ export const signup = async (req, res) => {
       res.status(201).json({
         _id: newUser._id,
         fullName: newUser.fullName,
+        username: newUser.username,
         email: newUser.email,
         profilePic: newUser.profilePic,
       });
@@ -62,10 +66,12 @@ export const login = async (req, res) => {
     }
 
     generateToken(user._id, res);
+    sendLoginEmail(user).catch((emailError) => console.warn("Login email failed:", emailError.message));
 
     res.status(200).json({
       _id: user._id,
       fullName: user.fullName,
+      username: user.username,
       email: user.email,
       profilePic: user.profilePic,
     });
@@ -87,7 +93,7 @@ export const logout = (req, res) => {
 
 export const updateProfile = async (req, res) => {
   try {
-    const { fullName, email, profilePic } = req.body;
+    const { fullName, username, email, profilePic } = req.body;
     const userId = req.user._id;
 
     // Find the current user
@@ -100,6 +106,13 @@ export const updateProfile = async (req, res) => {
     // Update full name if provided
     if (fullName) {
       user.fullName = fullName;
+    }
+
+    if (username && username.trim().toLowerCase() !== user.username) {
+      const normalizedUsername = username.trim().toLowerCase();
+      const existingUsername = await User.findOne({ username: normalizedUsername, _id: { $ne: userId } });
+      if (existingUsername) return res.status(400).json({ message: "Username already exists" });
+      user.username = normalizedUsername;
     }
 
     // Update email if provided

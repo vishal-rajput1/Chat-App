@@ -2,21 +2,22 @@ import { useEffect, useState } from "react";
 import { useChatStore } from "../store/useChatStore";
 import { useAuthStore } from "../store/useAuthStore";
 import SidebarSkeleton from "./skeletons/SidebarSkeleton";
-import { Users } from "lucide-react";
+import { Search, Users } from "lucide-react";
 
 const Sidebar = () => {
   const { getUsers, users, selectedUser, setSelectedUser, isUsersLoading } = useChatStore();
 
   const { onlineUsers } = useAuthStore();
   const [showOnlineOnly, setShowOnlineOnly] = useState(false);
+  const [search, setSearch] = useState("");
 
   useEffect(() => {
     getUsers();
   }, [getUsers]);
 
-  const filteredUsers = showOnlineOnly
+  const filteredUsers = (showOnlineOnly
     ? users.filter((user) => onlineUsers.includes(user._id))
-    : users;
+    : users).filter((user) => user.username?.toLowerCase().includes(search.toLowerCase()));
 
   if (isUsersLoading) return <SidebarSkeleton />;
 
@@ -27,6 +28,10 @@ const Sidebar = () => {
           <Users className="size-6" />
           <span className="font-medium hidden lg:block">Contacts</span>
         </div>
+        <label className="input input-sm mt-3 hidden lg:flex items-center gap-2">
+          <Search size={15} />
+          <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search @username" />
+        </label>
         {/* TODO: Online filter toggle */}
         <div className="mt-3 hidden lg:flex items-center gap-2">
           <label className="cursor-pointer flex items-center gap-2">
@@ -70,6 +75,7 @@ const Sidebar = () => {
             {/* User info - only visible on larger screens */}
             <div className="hidden lg:block text-left min-w-0">
               <div className="font-medium truncate">{user.fullName}</div>
+              <div className="text-xs text-primary truncate">@{user.username}</div>
               <div className="text-sm text-zinc-400">
                 {onlineUsers.includes(user._id) ? "Online" : "Offline"}
               </div>

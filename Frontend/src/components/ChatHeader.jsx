@@ -1,9 +1,9 @@
-import { X } from "lucide-react";
+import { Phone, Search, Video, X } from "lucide-react";
 import { useAuthStore } from "../store/useAuthStore";
 import { useChatStore } from "../store/useChatStore";
 
 const ChatHeader = () => {
-  const { selectedUser, setSelectedUser } = useChatStore();
+  const { selectedUser, setSelectedUser, messageSearch, setMessageSearch } = useChatStore();
   const { onlineUsers } = useAuthStore();
 
   return (
@@ -26,10 +26,7 @@ const ChatHeader = () => {
           </div>
         </div>
 
-        {/* Close button */}
-        <button onClick={() => setSelectedUser(null)}>
-          <X />
-        </button>
+        <div className="flex items-center gap-1"><label className="input input-sm hidden md:flex items-center gap-1"><Search size={14}/><input value={messageSearch} onChange={(e) => setMessageSearch(e.target.value)} placeholder="Search messages" /></label><button className="btn btn-ghost btn-sm btn-circle" title="Voice call" onClick={() => window.dispatchEvent(new CustomEvent("call:start", { detail: { user: selectedUser, video: false } }))}><Phone size={19}/></button><button className="btn btn-ghost btn-sm btn-circle" title="Video call" onClick={() => window.dispatchEvent(new CustomEvent("call:start", { detail: { user: selectedUser, video: true } }))}><Video size={19}/></button><button className="btn btn-ghost btn-sm btn-circle" onClick={() => setSelectedUser(null)}><X /></button></div>
       </div>
     </div>
   );

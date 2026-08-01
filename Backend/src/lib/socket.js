@@ -32,6 +32,16 @@ io.on("connection", (socket) => {
     delete userSocketMap[userId];
     io.emit("getOnlineUsers", Object.keys(userSocketMap));
   });
+
+  socket.on("typing", ({ receiverId, isTyping }) => {
+    const receiverSocketId = getReceiverSocketId(receiverId);
+    if (receiverSocketId) io.to(receiverSocketId).emit("typing", { userId, isTyping });
+  });
+
+  socket.on("call:signal", ({ receiverId, signal }) => {
+    const receiverSocketId = getReceiverSocketId(receiverId);
+    if (receiverSocketId) io.to(receiverSocketId).emit("call:signal", { from: userId, signal });
+  });
 });
 
 export { io, app, server };
