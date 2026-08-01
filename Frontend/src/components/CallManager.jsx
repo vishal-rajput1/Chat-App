@@ -1,45 +1,77 @@
 import { useEffect, useRef, useState } from "react";
-import { Phone, PhoneOff, Video } from "lucide-react";
+import { Phone, PhoneOff } from "lucide-react";
 import { useAuthStore } from "../store/useAuthStore";
 
 const CallManager = () => {
   const { socket, authUser } = useAuthStore();
-  const peer = useRef(null); const stream = useRef(null); const remoteRef = useRef(null); const localRef = useRef(null);
-  const [call, setCall] = useState(null); // { user, video, incoming }
-  const stop = () => {
+  const peer = useRef(null), localStream = useRef(null), remoteStream = useRef(null), pendingIce = useRef([]);
+  const localVideo = useRef(null), remoteVideo = useRef(null);
+  const [call, setCall] = useState(null);
+
+  useEffect(() => {
+    if (localVideo.current && localStream.current) localVideo.current.srcObject = localStream.current;
+    if (remoteVideo.current && remoteStream.current) remoteVideo.current.srcObject = remoteStream.current;
+  }, [call]);
+
+  const endCall = (notify = true) => {
+    if (notify && call?.peerId) socket?.emit("call:signal", { receiverId: call.peerId, signal: { type: "end" } });
     peer.current?.close(); peer.current = null;
-    stream.current?.getTracks().forEach((track) => track.stop()); stream.current = null;
+    localStream.current?.getTracks().forEach((track) => track.stop());
+    localStream.current = null; remoteStream.current = null; pendingIce.current = [];
     setCall(null);
   };
-  const preparePeer = async (video, receiverId) => {
+
+  const makePeer = async (video, peerId) => {
     const pc = new RTCPeerConnection({ iceServers: [{ urls: "stun:stun.l.google.com:19302" }] });
     peer.current = pc;
-    pc.onicecandidate = (event) => event.candidate && socket.emit("call:signal", { receiverId, signal: { type: "ice", candidate: event.candidate } });
-    pc.ontrack = (event) => { if (remoteRef.current) remoteRef.current.srcObject = event.streams[0]; };
-    stream.current = await navigator.mediaDevices.getUserMedia({ audio: true, video });
-    stream.current.getTracks().forEach((track) => pc.addTrack(track, stream.current));
-    if (localRef.current) localRef.current.srcObject = stream.current;
+    pc.onicecandidate = ({ candidate }) => candidate && socket.emit("call:signal", { receiverId: peerId, signal: { type: "ice", candidate } });
+    pc.ontrack = ({ streams }) => { remoteStream.current = streams[0]; if (remoteVideo.current) remoteVideo.current.srcObject = streams[0]; };
+    pc.onconnectionstatechange = () => { if (["failed", "closed"].includes(pc.connectionState)) endCall(false); };
+    localStream.current = await navigator.mediaDevices.getUserMedia({ audio: true, video });
+    localStream.current.getTracks().forEach((track) => pc.addTrack(track, localStream.current));
     return pc;
   };
+
   useEffect(() => {
     if (!socket) return;
-    const begin = async ({ detail }) => {
-      try { const pc = await preparePeer(detail.video, detail.user._id); setCall({ ...detail, incoming: false }); const offer = await pc.createOffer(); await pc.setLocalDescription(offer); socket.emit("call:signal", { receiverId: detail.user._id, signal: { type: "offer", sdp: offer, video: detail.video, user: authUser } }); }
-      catch { stop(); }
+    const start = async ({ detail }) => {
+      try {
+        setCall({ user: detail.user, video: detail.video, peerId: detail.user._id, status: "calling" });
+        const pc = await makePeer(detail.video, detail.user._id);
+        const offer = await pc.createOffer(); await pc.setLocalDescription(offer);
+        socket.emit("call:signal", { receiverId: detail.user._id, signal: { type: "offer", sdp: offer, video: detail.video, user: authUser } });
+      } catch { endCall(false); }
     };
-    const signal = async ({ from, signal: data }) => {
-      if (data.type === "offer") return setCall({ user: data.user, video: data.video, incoming: true, from, offer: data.sdp });
-      if (!peer.current) return;
-      if (data.type === "answer") await peer.current.setRemoteDescription(new RTCSessionDescription(data.sdp));
-      if (data.type === "ice") await peer.current.addIceCandidate(new RTCIceCandidate(data.candidate));
+    const receive = async ({ from, signal }) => {
+      if (signal.type === "end") return endCall(false);
+      if (signal.type === "offer") return setCall({ user: signal.user, video: signal.video, peerId: from, offer: signal.sdp, status: "incoming" });
+      if (!peer.current) {
+        if (signal.type === "ice") pendingIce.current.push(new RTCIceCandidate(signal.candidate));
+        return;
+      }
+      if (signal.type === "answer") { await peer.current.setRemoteDescription(new RTCSessionDescription(signal.sdp)); for (const candidate of pendingIce.current) await peer.current.addIceCandidate(candidate); pendingIce.current = []; setCall((current) => ({ ...current, status: "connected" })); }
+      if (signal.type === "ice") {
+        const candidate = new RTCIceCandidate(signal.candidate);
+        if (peer.current.remoteDescription) await peer.current.addIceCandidate(candidate); else pendingIce.current.push(candidate);
+      }
     };
-    window.addEventListener("call:start", begin); socket.on("call:signal", signal);
-    return () => { window.removeEventListener("call:start", begin); socket.off("call:signal", signal); };
+    window.addEventListener("call:start", start); socket.on("call:signal", receive);
+    return () => { window.removeEventListener("call:start", start); socket.off("call:signal", receive); };
   }, [socket, authUser]);
+
   const accept = async () => {
-    try { const pc = await preparePeer(call.video, call.from); setCall((current) => ({ ...current, incoming: false })); await pc.setRemoteDescription(new RTCSessionDescription(call.offer)); const answer = await pc.createAnswer(); await pc.setLocalDescription(answer); socket.emit("call:signal", { receiverId: call.from, signal: { type: "answer", sdp: answer } }); } catch { stop(); }
+    try {
+      setCall((current) => ({ ...current, status: "connecting" }));
+      const pc = await makePeer(call.video, call.peerId);
+      await pc.setRemoteDescription(new RTCSessionDescription(call.offer));
+      for (const candidate of pendingIce.current) await pc.addIceCandidate(candidate); pendingIce.current = [];
+      const answer = await pc.createAnswer(); await pc.setLocalDescription(answer);
+      socket.emit("call:signal", { receiverId: call.peerId, signal: { type: "answer", sdp: answer } });
+      setCall((current) => ({ ...current, status: "connected" }));
+    } catch { endCall(false); }
   };
+
   if (!call) return null;
-  return <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/75 p-4"><div className="w-full max-w-xl rounded-xl bg-base-100 p-5 text-center shadow-2xl"><h2 className="font-semibold">{call.incoming ? `Incoming ${call.video ? "video" : "voice"} call from` : "Calling"} @{call.user.username}</h2><div className="relative mt-4 min-h-52 overflow-hidden rounded-lg bg-black"><video ref={remoteRef} autoPlay playsInline className="h-72 w-full object-cover" /><video ref={localRef} autoPlay muted playsInline className="absolute bottom-2 right-2 h-24 w-32 rounded object-cover" /></div><div className="mt-4 flex justify-center gap-3">{call.incoming && <button className="btn btn-success btn-circle" onClick={accept}><Phone size={20}/></button>}<button className="btn btn-error btn-circle" onClick={stop}><PhoneOff size={20}/></button></div></div></div>;
+  return <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/75 p-4"><div className="w-full max-w-xl rounded-xl bg-base-100 p-5 text-center shadow-2xl"><h2 className="font-semibold">{call.status === "incoming" ? `Incoming ${call.video ? "video" : "voice"} call from` : call.status === "calling" ? "Calling" : "In call with"} @{call.user.username}</h2><div className="relative mt-4 min-h-52 overflow-hidden rounded-lg bg-black"><video ref={remoteVideo} autoPlay playsInline className={`h-72 w-full object-cover ${call.video ? "" : "hidden"}`} /><div className={!call.video ? "flex h-72 items-center justify-center text-5xl" : "hidden"}>☎</div><video ref={localVideo} autoPlay muted playsInline className={`absolute bottom-2 right-2 h-24 w-32 rounded object-cover ${call.video ? "" : "hidden"}`} /></div><div className="mt-4 flex justify-center gap-3">{call.status === "incoming" && <button className="btn btn-success btn-circle" onClick={accept} title="Answer"><Phone size={20}/></button>}<button className="btn btn-error btn-circle" onClick={() => endCall()} title="End call"><PhoneOff size={20}/></button></div></div></div>;
 };
 export default CallManager;

@@ -3,8 +3,9 @@ import { useAuthStore } from "../store/useAuthStore";
 import { Camera, Mail, User } from "lucide-react";
 
 const ProfilePage = () => {
-  const { authUser, isUpdatingProfile, updateProfile } = useAuthStore();
+  const { authUser, isUpdatingProfile, updateProfile, changePassword } = useAuthStore();
   const [selectedImg, setSelectedImg] = useState(null);
+  const [passwords, setPasswords] = useState({ currentPassword: "", newPassword: "", confirmPassword: "" });
 
 const [formData, setFormData] = useState({
   fullName: authUser?.fullName || "",
@@ -26,6 +27,12 @@ const handleSave = async () => {
     email: formData.email,
     profilePic: selectedImg || authUser.profilePic,
   });
+};
+
+const handlePasswordChange = async (event) => {
+  event.preventDefault();
+  if (passwords.newPassword !== passwords.confirmPassword) return;
+  if (await changePassword(passwords)) setPasswords({ currentPassword: "", newPassword: "", confirmPassword: "" });
 };
 
   const handleImageUpload = async (e) => {
@@ -146,6 +153,14 @@ const handleSave = async () => {
               </div>
             </div>
           </div>
+          <form className="mt-6 bg-base-300 rounded-xl p-6 space-y-4" onSubmit={handlePasswordChange}>
+            <h2 className="text-lg font-medium">Change password</h2>
+            <input type="password" required minLength="6" value={passwords.currentPassword} onChange={(e) => setPasswords({ ...passwords, currentPassword: e.target.value })} placeholder="Current password" className="input input-bordered w-full" />
+            <input type="password" required minLength="6" value={passwords.newPassword} onChange={(e) => setPasswords({ ...passwords, newPassword: e.target.value })} placeholder="New password (minimum 6 characters)" className="input input-bordered w-full" />
+            <input type="password" required minLength="6" value={passwords.confirmPassword} onChange={(e) => setPasswords({ ...passwords, confirmPassword: e.target.value })} placeholder="Confirm new password" className="input input-bordered w-full" />
+            {passwords.confirmPassword && passwords.confirmPassword !== passwords.newPassword && <p className="text-sm text-error">Passwords do not match.</p>}
+            <button className="btn btn-primary" disabled={passwords.newPassword !== passwords.confirmPassword}>Update password</button>
+          </form>
         </div>
       </div>
    
