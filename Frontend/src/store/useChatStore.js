@@ -30,7 +30,10 @@ getMessages: async (userId) => {
     set({ isMessagesLoading: true });
     try {
       const res = await axiosInstance.get(`/messages/${userId}`);
-      set({ messages: res.data });
+      set((state) => ({
+        messages: res.data,
+        users: state.users.map((user) => user._id === userId ? { ...user, unreadCount: 0 } : user),
+      }));
     } catch (error) {
       toast.error(error.response.data.message);
     } finally {
@@ -41,7 +44,10 @@ getMessages: async (userId) => {
     const { selectedUser, messages } = get();
     try {
       const res = await axiosInstance.post(`/messages/send/${selectedUser._id}`, messageData);
-      set({ messages: [...messages, res.data] });
+      set((state) => ({
+        messages: [...messages, res.data],
+        users: [selectedUser, ...state.users.filter((user) => user._id !== selectedUser._id)],
+      }));
     } catch (error) {
       toast.error(error.response.data.message);
     }
@@ -56,6 +62,13 @@ getMessages: async (userId) => {
   reactToMessage: async (id, emoji) => {
     const res = await axiosInstance.post(`/messages/${id}/reactions`, { emoji });
     set((state) => ({ messages: state.messages.map((m) => m._id === id ? res.data : m) }));
+  },
+  updateNickname: async (userId, nickname) => {
+    const res = await axiosInstance.put(`/messages/contacts/${userId}/nickname`, { nickname });
+    set((state) => ({
+      users: state.users.map((user) => user._id === userId ? { ...user, nickname: res.data.nickname } : user),
+      selectedUser: state.selectedUser?._id === userId ? { ...state.selectedUser, nickname: res.data.nickname } : state.selectedUser,
+    }));
   },
 
    editMessage: async (id, text) => {
@@ -87,6 +100,7 @@ deleteMessage: async (id) => {
       set({
         messages: [...get().messages, newMessage],
       });
+      set((state) => ({ users: [selectedUser, ...state.users.filter((user) => user._id !== selectedUser._id)] }));
     });
     socket.on("typing", ({ userId, isTyping }) => {
       if (userId === selectedUser._id) set({ isTyping });
@@ -108,4 +122,12 @@ deleteMessage: async (id) => {
   },
 
   setSelectedUser: (selectedUser) => set({ selectedUser }),
+  receiveUnreadMessage: (message) => set((state) => {
+    const sender = state.users.find((user) => user._id === message.senderId);
+    if (!sender) return state;
+    const isOpen = state.selectedUser?._id === message.senderId;
+    return {
+      users: [{ ...sender, unreadCount: isOpen ? 0 : (sender.unreadCount || 0) + 1 }, ...state.users.filter((user) => user._id !== message.senderId)],
+    };
+  }),
 }));

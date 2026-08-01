@@ -5,7 +5,7 @@ import MessageInput from "./MessageInput";
 import MessageSkeleton from "./skeletons/MessageSkeleton";
 import { useAuthStore } from "../store/useAuthStore";
 import { formatMessageTime } from "../lib/utils";
-import { Check, CheckCheck, CornerUpLeft, MoreVertical, Pencil, Smile, Trash2 } from "lucide-react";
+import { Check, CheckCheck, CornerUpLeft, MoreVertical, Pencil, Smile, Trash2, X } from "lucide-react";
 
 const ChatContainer = () => {
   const {
@@ -35,6 +35,7 @@ const ChatContainer = () => {
 
   const [editing, setEditing] = useState(null);
 const [text, setText] = useState("");
+  const [previewImage, setPreviewImage] = useState(null);
   useEffect(() => {
     if (messageEndRef.current && messages) {
       messageEndRef.current.scrollIntoView({ behavior: "smooth" });
@@ -92,7 +93,8 @@ const [text, setText] = useState("");
     <img
       src={message.image}
       alt="Attachment"
-      className="rounded-lg mb-2 max-w-55"
+      className="rounded-lg mb-2 max-w-55 cursor-zoom-in"
+      onClick={() => setPreviewImage(message.image)}
     />
   )}
 
@@ -167,10 +169,15 @@ const [text, setText] = useState("");
 </div>
           </div>
         ))}
+        <div ref={messageEndRef} />
       </div>
       {isTyping && <div className="px-5 pb-1 text-xs italic text-base-content/60">@{selectedUser.username} is typing…</div>}
 
       <MessageInput />
+      {previewImage && <div className="fixed inset-0 z-[90] flex items-center justify-center bg-black/90 p-4" onClick={() => setPreviewImage(null)}>
+        <button className="btn btn-circle btn-ghost absolute right-4 top-4 text-white" onClick={() => setPreviewImage(null)} aria-label="Close image preview"><X /></button>
+        <img src={previewImage} alt="Full image preview" className="max-h-full max-w-full rounded-lg object-contain" onClick={(event) => event.stopPropagation()} />
+      </div>}
     </div>
   );
 };

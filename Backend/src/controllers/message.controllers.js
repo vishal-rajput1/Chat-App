@@ -1,5 +1,6 @@
 import User from "../models/user.model.js";
 import Message from "../models/message.model.js";
+import Contact from "../models/contact.model.js";
 
 import cloudinary from "../lib/cloudinary.js";
 import { getReceiverSocketId, io } from "../lib/socket.js";
@@ -10,7 +11,59 @@ export const getUsersForSidebar = async (req, res) => {
     const query = req.query.search?.trim();
     const filter = { _id: { $ne: loggedInUserId } };
     if (query) filter.username = { $regex: query, $options: "i" };
-    const filteredUsers = await User.find(filter).select("-password").sort({ username: 1 });
+    const filteredUsers = await User.aggregate([
+      { $match: filter },
+      {
+        $lookup: {
+          from: "messages",
+          let: { contactId: "$_id" },
+          pipeline: [
+            {
+              $match: {
+                $expr: {
+                  $or: [
+                    { $and: [{ $eq: ["$senderId", req.user._id] }, { $eq: ["$receiverId", "$$contactId"] }] },
+                    { $and: [{ $eq: ["$senderId", "$$contactId"] }, { $eq: ["$receiverId", req.user._id] }] },
+                  ],
+                },
+              },
+            },
+            { $sort: { createdAt: -1 } },
+            { $limit: 1 },
+            { $project: { createdAt: 1, text: 1 } },
+          ],
+          as: "latestMessage",
+        },
+      },
+      { $addFields: { latestMessage: { $arrayElemAt: ["$latestMessage", 0] } } },
+      {
+        $lookup: {
+          from: "messages",
+          let: { contactId: "$_id" },
+          pipeline: [
+            { $match: { $expr: { $and: [
+              { $eq: ["$senderId", "$$contactId"] },
+              { $eq: ["$receiverId", req.user._id] },
+              { $eq: ["$seen", false] },
+            ] } } },
+            { $count: "count" },
+          ],
+          as: "unread",
+        },
+      },
+      { $addFields: { unreadCount: { $ifNull: [{ $arrayElemAt: ["$unread.count", 0] }, 0] } } },
+      {
+        $lookup: {
+          from: "contacts",
+          let: { contactId: "$_id" },
+          pipeline: [{ $match: { $expr: { $and: [{ $eq: ["$ownerId", req.user._id] }, { $eq: ["$contactId", "$$contactId"] }] } } }, { $project: { nickname: 1 } }],
+          as: "contactSettings",
+        },
+      },
+      { $addFields: { nickname: { $ifNull: [{ $arrayElemAt: ["$contactSettings.nickname", 0] }, ""] } } },
+      { $sort: { "latestMessage.createdAt": -1, username: 1 } },
+      { $project: { password: 0, unread: 0, contactSettings: 0 } },
+    ]);
 
     res.status(200).json(filteredUsers);
   } catch (error) {
@@ -152,6 +205,20 @@ export const deleteMessage = async (req, res) => {
       message: error.message,
     });
   }
+};
+
+export const updateContactNickname = async (req, res) => {
+  try {
+    const nickname = req.body.nickname?.trim() || "";
+    if (nickname.length > 40) return res.status(400).json({ message: "Nickname must be 40 characters or less" });
+    const contact = await User.findById(req.params.id).select("_id");
+    if (!contact) return res.status(404).json({ message: "User not found" });
+    const settings = await Contact.findOneAndUpdate(
+      { ownerId: req.user._id, contactId: contact._id },
+      { nickname }, { new: true, upsert: true, runValidators: true },
+    );
+    res.json({ nickname: settings.nickname });
+  } catch (error) { res.status(500).json({ message: "Unable to update nickname" }); }
 };
 
 export const reactToMessage = async (req, res) => {

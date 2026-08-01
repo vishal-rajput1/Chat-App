@@ -5,15 +5,22 @@ import SidebarSkeleton from "./skeletons/SidebarSkeleton";
 import { Search, Users } from "lucide-react";
 
 const Sidebar = () => {
-  const { getUsers, users, selectedUser, setSelectedUser, isUsersLoading } = useChatStore();
+  const { getUsers, users, selectedUser, setSelectedUser, isUsersLoading, receiveUnreadMessage } = useChatStore();
 
-  const { onlineUsers } = useAuthStore();
+  const { onlineUsers, socket } = useAuthStore();
   const [showOnlineOnly, setShowOnlineOnly] = useState(false);
   const [search, setSearch] = useState("");
 
   useEffect(() => {
     getUsers();
   }, [getUsers]);
+
+  useEffect(() => {
+    if (!socket) return;
+    const handleNewMessage = (message) => receiveUnreadMessage(message);
+    socket.on("newMessage", handleNewMessage);
+    return () => socket.off("newMessage", handleNewMessage);
+  }, [socket, receiveUnreadMessage]);
 
   const filteredUsers = (showOnlineOnly
     ? users.filter((user) => onlineUsers.includes(user._id))
@@ -74,12 +81,13 @@ const Sidebar = () => {
 
             {/* User info - only visible on larger screens */}
             <div className="hidden lg:block text-left min-w-0">
-              <div className="font-medium truncate">{user.fullName}</div>
+              <div className="font-medium truncate">{user.nickname || user.fullName}</div>
               <div className="text-xs text-primary truncate">@{user.username}</div>
               <div className="text-sm text-zinc-400">
-                {onlineUsers.includes(user._id) ? "Online" : "Offline"}
+                {user.unreadCount ? `${user.unreadCount} unread` : onlineUsers.includes(user._id) ? "Online" : "Offline"}
               </div>
             </div>
+            {user.unreadCount > 0 && <span className="badge badge-primary badge-sm ml-auto">{user.unreadCount > 99 ? "99+" : user.unreadCount}</span>}
           </button>
         ))}
 
