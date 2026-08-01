@@ -236,3 +236,17 @@ export const reactToMessage = async (req, res) => {
     res.json(message);
   } catch (error) { res.status(500).json({ message: error.message }); }
 };
+
+export const createCallLog = async (req, res) => {
+  try {
+    const { id: receiverId } = req.params;
+    const { type, status, duration } = req.body;
+    if (!["voice", "video"].includes(type) || !["completed", "missed", "declined"].includes(status)) return res.status(400).json({ message: "Invalid call log" });
+    const safeDuration = Math.max(0, Math.min(Number(duration) || 0, 86400));
+    const label = `${type === "video" ? "Video" : "Voice"} call · ${status}${safeDuration ? ` · ${Math.floor(safeDuration / 60)}:${String(safeDuration % 60).padStart(2, "0")}` : ""}`;
+    const callMessage = await Message.create({ senderId: req.user._id, receiverId, text: label, call: { type, status, duration: safeDuration }, delivered: Boolean(getReceiverSocketId(receiverId)) });
+    const receiverSocketId = getReceiverSocketId(receiverId);
+    if (receiverSocketId) io.to(receiverSocketId).emit("newMessage", callMessage);
+    res.status(201).json(callMessage);
+  } catch (error) { res.status(500).json({ message: "Unable to save call history" }); }
+};

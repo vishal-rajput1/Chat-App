@@ -42,6 +42,11 @@ delivered: {
           emoji: { type: String, required: true, maxlength: 16 },
         }],
         audio: { type: String, default: "" },
+        call: {
+          type: { type: String, enum: ["voice", "video"], default: null },
+          status: { type: String, enum: ["completed", "missed", "declined"], default: null },
+          duration: { type: Number, default: 0 },
+        },
     },
         {
             timestamps: true

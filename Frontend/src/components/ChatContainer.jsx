@@ -24,8 +24,10 @@ const ChatContainer = () => {
 } = useChatStore();
   const { authUser } = useAuthStore();
   const messageEndRef = useRef(null);
+  const isInitialScroll = useRef(true);
 
   useEffect(() => {
+    isInitialScroll.current = true;
     getMessages(selectedUser._id);
 
     subscribeToMessages();
@@ -38,7 +40,9 @@ const [text, setText] = useState("");
   const [previewImage, setPreviewImage] = useState(null);
   useEffect(() => {
     if (messageEndRef.current && messages) {
-      messageEndRef.current.scrollIntoView({ behavior: "smooth" });
+      // Opening a chat should jump to its newest message, not visibly travel from the top.
+      messageEndRef.current.scrollIntoView({ behavior: isInitialScroll.current ? "auto" : "smooth", block: "end" });
+      isInitialScroll.current = false;
     }
   }, [messages]);
 
@@ -140,7 +144,7 @@ const [text, setText] = useState("");
   <div className="absolute top-1 right-1 dropdown dropdown-end">
     <button
       tabIndex={0}
-      className="btn btn-ghost btn-xs btn-circle opacity-0 hover:opacity-100 group-hover:opacity-100"
+      className="btn btn-ghost btn-xs btn-circle opacity-100 sm:opacity-0 sm:group-hover:opacity-100"
     >
       <MoreVertical size={15} />
     </button>
