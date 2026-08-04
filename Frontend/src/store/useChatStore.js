@@ -70,6 +70,20 @@ getMessages: async (userId) => {
       selectedUser: state.selectedUser?._id === userId ? { ...state.selectedUser, nickname: res.data.nickname } : state.selectedUser,
     }));
   },
+  updateRelationship: async (userId, action, accept) => {
+    const endpoints = {
+      request: () => axiosInstance.post(`/messages/friends/${userId}`),
+      respond: () => axiosInstance.put(`/messages/friends/${userId}`, { accept }),
+      block: () => axiosInstance.put(`/messages/blocks/${userId}`),
+    };
+    const result = await endpoints[action]();
+    if (action === "block") toast.success(result.data.blocked ? "User blocked" : "User unblocked");
+    if (action === "request") toast.success("Friend request sent");
+    if (action === "respond") toast.success(accept ? "Friend request accepted" : "Friend request declined");
+    await get().getUsers();
+    const updated = get().users.find((user) => user._id === userId);
+    if (updated && get().selectedUser?._id === userId) set({ selectedUser: updated });
+  },
 
    editMessage: async (id, text) => {
   const res = await axiosInstance.put(`/messages/${id}`, { text });

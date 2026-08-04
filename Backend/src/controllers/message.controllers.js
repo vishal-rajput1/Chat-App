@@ -1,6 +1,8 @@
 import User from "../models/user.model.js";
 import Message from "../models/message.model.js";
 import Contact from "../models/contact.model.js";
+import Friendship from "../models/friendship.model.js";
+import Block from "../models/block.model.js";
 
 import cloudinary from "../lib/cloudinary.js";
 import { getReceiverSocketId, io } from "../lib/socket.js";
@@ -65,7 +67,17 @@ export const getUsersForSidebar = async (req, res) => {
       { $project: { password: 0, unread: 0, contactSettings: 0 } },
     ]);
 
-    res.status(200).json(filteredUsers);
+    const ids = filteredUsers.map((user) => user._id);
+    const [friendships, blocks] = await Promise.all([
+      Friendship.find({ $or: [{ requesterId: req.user._id, recipientId: { $in: ids } }, { recipientId: req.user._id, requesterId: { $in: ids } }] }),
+      Block.find({ $or: [{ blockerId: req.user._id, blockedId: { $in: ids } }, { blockedId: req.user._id, blockerId: { $in: ids } }] }),
+    ]);
+    const enrichedUsers = filteredUsers.map((user) => {
+      const friendship = friendships.find((item) => item.requesterId.equals(user._id) || item.recipientId.equals(user._id));
+      const block = blocks.find((item) => item.blockerId.equals(user._id) || item.blockedId.equals(user._id));
+      return { ...user, friendshipStatus: friendship?.status || "none", requestDirection: friendship?.requesterId.equals(req.user._id) ? "sent" : friendship ? "received" : null, isBlocked: Boolean(block), blockedByMe: block?.blockerId.equals(req.user._id) || false };
+    });
+    res.status(200).json(enrichedUsers);
   } catch (error) {
     console.error("Error in getUsersForSidebar: ", error.message);
     res.status(500).json({ error: "Internal server error" });
@@ -101,6 +113,12 @@ export const sendMessage = async (req, res) => {
     const { text, image, audio, replyTo } = req.body;
     const { id: receiverId } = req.params;
     const senderId = req.user._id;
+    const [friendship, blocked] = await Promise.all([
+      Friendship.findOne({ status: "accepted", $or: [{ requesterId: senderId, recipientId: receiverId }, { requesterId: receiverId, recipientId: senderId }] }),
+      Block.findOne({ $or: [{ blockerId: senderId, blockedId: receiverId }, { blockerId: receiverId, blockedId: senderId }] }),
+    ]);
+    if (blocked) return res.status(403).json({ message: "You cannot message this user" });
+    if (!friendship) return res.status(403).json({ message: "Messages are available after the friend request is accepted" });
 
     let imageUrl;
     if (image) {
@@ -191,6 +209,7 @@ export const deleteMessage = async (req, res) => {
 
     message.text = "This message was deleted";
     message.image = "";
+    message.audio = "";
     message.deleted = true;
 
     await message.save();
@@ -249,4 +268,36 @@ export const createCallLog = async (req, res) => {
     if (receiverSocketId) io.to(receiverSocketId).emit("newMessage", callMessage);
     res.status(201).json(callMessage);
   } catch (error) { res.status(500).json({ message: "Unable to save call history" }); }
+};
+
+export const sendFriendRequest = async (req, res) => {
+  try {
+    const recipientId = req.params.id;
+    if (recipientId === req.user._id.toString()) return res.status(400).json({ message: "You cannot add yourself" });
+    if (await Block.exists({ $or: [{ blockerId: req.user._id, blockedId: recipientId }, { blockerId: recipientId, blockedId: req.user._id }] })) return res.status(403).json({ message: "Friend request unavailable" });
+    const existing = await Friendship.findOne({ $or: [{ requesterId: req.user._id, recipientId }, { requesterId: recipientId, recipientId: req.user._id }] });
+    if (existing) return res.status(400).json({ message: "Friend request already exists" });
+    await Friendship.create({ requesterId: req.user._id, recipientId });
+    res.status(201).json({ message: "Friend request sent" });
+  } catch (error) { res.status(500).json({ message: "Unable to send friend request" }); }
+};
+
+export const respondToFriendRequest = async (req, res) => {
+  try {
+    const friendship = await Friendship.findOne({ requesterId: req.params.id, recipientId: req.user._id, status: "pending" });
+    if (!friendship) return res.status(404).json({ message: "Friend request not found" });
+    if (req.body.accept) { friendship.status = "accepted"; await friendship.save(); return res.json({ message: "Friend request accepted" }); }
+    await friendship.deleteOne();
+    res.json({ message: "Friend request declined" });
+  } catch (error) { res.status(500).json({ message: "Unable to respond to friend request" }); }
+};
+
+export const toggleBlock = async (req, res) => {
+  try {
+    const query = { blockerId: req.user._id, blockedId: req.params.id };
+    const existing = await Block.findOne(query);
+    if (existing) { await existing.deleteOne(); return res.json({ blocked: false }); }
+    await Block.create(query);
+    res.json({ blocked: true });
+  } catch (error) { res.status(500).json({ message: "Unable to update block" }); }
 };

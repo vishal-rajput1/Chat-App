@@ -6,8 +6,9 @@ import toast from "react-hot-toast";
 const MessageInput = () => {
   const [text, setText] = useState("");
   const [imagePreview, setImagePreview] = useState(null);
+  const [audioPreview, setAudioPreview] = useState(null);
   const fileInputRef = useRef(null);
-  const { sendMessage, replyTo, setReplyTo, sendTyping } = useChatStore();
+  const { sendMessage, replyTo, setReplyTo, sendTyping, selectedUser } = useChatStore();
   const [isRecording, setIsRecording] = useState(false);
   const recorder = useRef(null);
 
@@ -32,18 +33,20 @@ const MessageInput = () => {
 
   const handleSendMessage = async (e) => {
     e.preventDefault();
-    if (!text.trim() && !imagePreview) return;
+    if (!text.trim() && !imagePreview && !audioPreview) return;
 
     try {
       await sendMessage({
         text: text.trim(),
         image: imagePreview,
+        audio: audioPreview,
         replyTo: replyTo?._id,
       });
 
       // Clear form
       setText("");
       setImagePreview(null);
+      setAudioPreview(null);
       if (fileInputRef.current) fileInputRef.current.value = "";
       setReplyTo(null);
       sendTyping(false);
@@ -69,7 +72,7 @@ const MessageInput = () => {
       mediaRecorder.onstop = () => {
         stream.getTracks().forEach((track) => track.stop());
         const reader = new FileReader();
-        reader.onloadend = () => sendMessage({ audio: reader.result });
+        reader.onloadend = () => setAudioPreview(reader.result);
         reader.readAsDataURL(new Blob(chunks, { type: "audio/webm" }));
         setIsRecording(false);
       };
@@ -81,6 +84,7 @@ const MessageInput = () => {
 
   return (
     <div className="p-4 w-full" onDragOver={(e) => e.preventDefault()} onDrop={(e) => { e.preventDefault(); acceptDroppedFile(e.dataTransfer.files[0]); }}>
+      {selectedUser.friendshipStatus !== "accepted" && <p className="mb-2 text-center text-sm opacity-60">{selectedUser.isBlocked ? "Messaging is unavailable." : "You can send messages after the friend request is accepted."}</p>}
       {imagePreview && (
         <div className="mb-3 flex items-center gap-2">
           <div className="relative">
@@ -100,15 +104,17 @@ const MessageInput = () => {
           </div>
         </div>
       )}
+      {audioPreview && <div className="mb-3 flex items-center gap-2 rounded-lg border border-base-300 p-2"><audio controls src={audioPreview} className="max-w-[80%]" /><button type="button" className="btn btn-ghost btn-sm btn-circle" onClick={() => setAudioPreview(null)} title="Delete voice note"><X size={17}/></button></div>}
       {replyTo && <div className="mb-2 flex justify-between rounded border-l-4 border-primary bg-base-200 px-3 py-2 text-xs"><span>Replying to: {replyTo.text || "Attachment"}</span><button type="button" onClick={() => setReplyTo(null)}><X size={14}/></button></div>}
 
-      <form onSubmit={handleSendMessage} className="flex items-center gap-2">
+      <form onSubmit={handleSendMessage} className="flex items-center gap-2" aria-disabled={selectedUser.friendshipStatus !== "accepted" || selectedUser.isBlocked}>
         <div className="flex-1 flex gap-2">
           <input
             type="text"
             className="w-full input input-bordered rounded-lg input-sm sm:input-md"
             placeholder="Type a message..."
             value={text}
+            disabled={selectedUser.friendshipStatus !== "accepted" || selectedUser.isBlocked}
             onChange={(e) => { setText(e.target.value); sendTyping(Boolean(e.target.value)); }}
           />
           <input
@@ -121,20 +127,21 @@ const MessageInput = () => {
 
           <button
             type="button"
-            className={`hidden sm:flex btn btn-circle
+            className={`flex btn btn-circle
                      ${imagePreview ? "text-emerald-500" : "text-zinc-400"}`}
+            disabled={selectedUser.friendshipStatus !== "accepted" || selectedUser.isBlocked}
             onClick={() => fileInputRef.current?.click()}
           >
             <Image size={20} />
           </button>
-          <button type="button" className={`btn btn-circle ${isRecording ? "btn-error" : "text-zinc-400"}`} onClick={toggleRecording} title="Voice message">
+          <button type="button" disabled={selectedUser.friendshipStatus !== "accepted" || selectedUser.isBlocked} className={`btn btn-circle ${isRecording ? "btn-error" : "text-zinc-400"}`} onClick={toggleRecording} title="Voice message">
             <Mic size={18} />
           </button>
         </div>
         <button
           type="submit"
           className="btn btn-sm btn-circle"
-          disabled={!text.trim() && !imagePreview}
+          disabled={(!text.trim() && !imagePreview && !audioPreview) || selectedUser.friendshipStatus !== "accepted" || selectedUser.isBlocked}
         >
           <Send size={22} />
         </button>

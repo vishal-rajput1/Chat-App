@@ -10,6 +10,7 @@ const Sidebar = () => {
   const { onlineUsers, socket } = useAuthStore();
   const [showOnlineOnly, setShowOnlineOnly] = useState(false);
   const [search, setSearch] = useState("");
+  const [showMobileSearch, setShowMobileSearch] = useState(false);
 
   useEffect(() => {
     getUsers();
@@ -29,12 +30,14 @@ const Sidebar = () => {
   if (isUsersLoading) return <SidebarSkeleton />;
 
   return (
-    <aside className="h-full w-20 lg:w-72 border-r border-base-300 flex flex-col transition-all duration-200">
+    <aside className={`h-full ${showMobileSearch ? "w-64" : "w-20"} lg:w-72 border-r border-base-300 flex flex-col transition-all duration-200`}>
       <div className="border-b border-base-300 w-full p-5">
         <div className="flex items-center gap-2">
           <Users className="size-6" />
           <span className="font-medium hidden lg:block">Contacts</span>
+          <button className="btn btn-ghost btn-xs btn-circle lg:hidden" onClick={() => setShowMobileSearch(!showMobileSearch)} aria-label="Search users"><Search size={18} /></button>
         </div>
+        {showMobileSearch && <label className="input input-sm mt-3 flex items-center gap-1 lg:hidden"><Search size={14}/><input autoFocus value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Username" /></label>}
         <label className="input input-sm mt-3 hidden lg:flex items-center gap-2">
           <Search size={15} />
           <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search @username" />

@@ -1,6 +1,6 @@
 import express from "express";
 import { protectRoute } from "../middleware/auth.middleware.js";
-import { createCallLog, deleteMessage, editMessage, getMessages, getUsersForSidebar, reactToMessage, sendMessage, updateContactNickname } from "../controllers/message.controllers.js";
+import { createCallLog, deleteMessage, editMessage, getMessages, getUsersForSidebar, reactToMessage, respondToFriendRequest, sendFriendRequest, sendMessage, toggleBlock, updateContactNickname } from "../controllers/message.controllers.js";
 
 const router = express.Router();
 
@@ -12,6 +12,9 @@ router.put("/:id", protectRoute, editMessage);
 router.delete("/:id", protectRoute, deleteMessage);
 router.post("/:id/reactions", protectRoute, reactToMessage);
 router.post("/call/:id", protectRoute, createCallLog);
+router.post("/friends/:id", protectRoute, sendFriendRequest);
+router.put("/friends/:id", protectRoute, respondToFriendRequest);
+router.put("/blocks/:id", protectRoute, toggleBlock);
 router.put("/contacts/:id/nickname", protectRoute, updateContactNickname);
 
 export default router;
