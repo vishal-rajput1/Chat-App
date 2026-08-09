@@ -4,6 +4,7 @@ import cookieParser from "cookie-parser";
 import cors from "cors";
 
 import path from "path";
+import { corsOrigin } from "./lib/cors.js";
 
 import { connectDB } from "./lib/db.js";
 
@@ -21,11 +22,7 @@ app.use(express.urlencoded({ limit: "10mb", extended: true }));
 app.use(cookieParser());
 app.use(
   cors({
-    origin: (origin, callback) => {
-      // Vite selects the next free port (for example 5174) when 5173 is occupied.
-      if (!origin || /^http:\/\/localhost:\d+$/.test(origin)) return callback(null, true);
-      callback(new Error("Origin not allowed by CORS"));
-    },
+    origin: corsOrigin,
     credentials: true,
   })
 );
