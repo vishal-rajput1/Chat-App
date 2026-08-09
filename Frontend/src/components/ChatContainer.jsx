@@ -6,6 +6,7 @@ import MessageSkeleton from "./skeletons/MessageSkeleton";
 import { useAuthStore } from "../store/useAuthStore";
 import { formatMessageTime } from "../lib/utils";
 import { Check, CheckCheck, CornerUpLeft, MoreVertical, Pencil, Smile, Trash2, X } from "lucide-react";
+import EmojiPicker from "./EmojiPicker";
 
 const ChatContainer = () => {
   const {
@@ -17,14 +18,17 @@ const ChatContainer = () => {
   unsubscribeFromMessages,
   editMessage,
   deleteMessage,
-  reactToMessage,
   setReplyTo,
+    reactToMessage,
   isTyping,
   messageSearch,
 } = useChatStore();
   const { authUser } = useAuthStore();
   const messageEndRef = useRef(null);
   const isInitialScroll = useRef(true);
+  
+  const [emojiMessage, setEmojiMessage] = useState(null);
+  const [activeMessageId, setActiveMessageId] = useState(null);
 
   useEffect(() => {
     isInitialScroll.current = true;
@@ -61,11 +65,16 @@ const [text, setText] = useState("");
     );
   }
 
+const handleEmojiSelect = (emoji) => {
+    reactToMessage(activeMessageId, emoji);
+    setShowEmojiPicker(false);
+};
+
   return (
-    <div className="flex-1 flex flex-col overflow-auto">
+    <div className="flex-1 min-w-0 flex flex-col overflow-auto">
       <ChatHeader />
 
-      <div className="flex-1 overflow-y-auto p-4 space-y-4">
+      <div className="flex-1 overflow-y-auto p-2 sm:p-4 space-y-4">
         {messages.filter((message) => !messageSearch || message.text?.toLowerCase().includes(messageSearch.toLowerCase())).map((message) => (
           <div
   className={`chat group ${
@@ -103,8 +112,38 @@ const [text, setText] = useState("");
   )}
 
   {message.audio && <audio controls src={message.audio} className="mt-1 max-w-full" />}
-  {message.reactions?.length > 0 && <div className="mt-1 flex flex-wrap gap-1">{Object.entries(message.reactions.reduce((all, reaction) => ({ ...all, [reaction.emoji]: (all[reaction.emoji] || 0) + 1 }), {})).map(([emoji, count]) => <button key={emoji} onClick={() => reactToMessage(message._id, emoji)} className="rounded-full bg-base-200 px-1.5 text-xs">{emoji} {count}</button>)}</div>}
-  <div className="mt-1 flex items-center gap-1 text-xs opacity-60"><button onClick={() => setReplyTo(message)} title="Reply"><CornerUpLeft size={14}/></button><button onClick={() => reactToMessage(message._id, "👍")} title="React"><Smile size={14}/></button>{message.senderId === authUser._id && (message.seen ? <CheckCheck size={15} className="text-primary"/> : message.delivered ? <CheckCheck size={15}/> : <Check size={15}/>)}</div>
+  {message.reactions?.length > 0 && 
+  <div className="mt-1 flex flex-wrap gap-1">
+    {Object.entries(message.reactions.reduce((all, reaction) => (
+      { ...all, [reaction.emoji]: (all[reaction.emoji] || 0) + 1 }),
+       {})).map(([emoji, count]) =>
+        <button key={emoji} onClick={() => reactToMessage(message._id, emoji)} className="rounded-full bg-base-200 px-1.5 text-xs">{
+          emoji} {count}</button>)}</div>}
+  <div className="mt-1 flex items-center gap-1 text-xs opacity-60"><button onClick={() => setReplyTo(message)} title="Reply"><CornerUpLeft size={14}/></button>
+        <button
+    onClick={() =>
+        setEmojiMessage(
+            emojiMessage === message._id ? null : message._id
+        )
+    }
+>
+    <Smile size={18}/>
+</button>
+{emojiMessage === message._id && (
+    <div className="absolute bottom-10 right-0 z-50">
+        <EmojiPicker
+            onEmojiClick={(emoji)=>{
+                reactToMessage(message._id, emoji);
+                setEmojiMessage(null);
+            }}
+        />
+    </div>
+)}
+{message.senderId === authUser._id && (message.seen ? <CheckCheck size={15} className="text-primary"/> 
+: message.delivered ? <CheckCheck size={15}/> : <Check size={15}/>
+)}
+</div>
+
 
   {message.deleted ? (
     <i className="text-sm opacity-60">

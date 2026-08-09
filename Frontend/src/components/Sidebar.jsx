@@ -83,7 +83,7 @@ const Sidebar = () => {
             </div>
 
             {/* User info - only visible on larger screens */}
-            <div className="hidden lg:block text-left min-w-0">
+            <div className={`${showMobileSearch ? "block" : "hidden"} lg:block text-left min-w-0`}>
               <div className="font-medium truncate">{user.nickname || user.fullName}</div>
               <div className="text-xs text-primary truncate">@{user.username}</div>
               <div className="text-sm text-zinc-400">

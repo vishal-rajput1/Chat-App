@@ -53,6 +53,12 @@ const CallManager = () => {
     return pc;
   };
 
+  const addCandidates = async (pc, candidates) => {
+    for (const candidate of candidates) {
+      try { await pc.addIceCandidate(candidate); } catch (error) { console.warn("Ignoring invalid ICE candidate", error); }
+    }
+  };
+
   useEffect(() => {
     if (!socket) return;
     const start = async ({ detail }) => {
@@ -76,10 +82,10 @@ const CallManager = () => {
         if (signal.type === "ice") pendingIce.current.push(new RTCIceCandidate(signal.candidate));
         return;
       }
-      if (signal.type === "answer") { await peer.current.setRemoteDescription(new RTCSessionDescription(signal.sdp)); for (const candidate of pendingIce.current) await peer.current.addIceCandidate(candidate); pendingIce.current = []; clearTimeout(callTimer.current); setCall((current) => ({ ...current, status: "connected", connectedAt: Date.now() })); }
+      if (signal.type === "answer") { await peer.current.setRemoteDescription(new RTCSessionDescription(signal.sdp)); await addCandidates(peer.current, pendingIce.current); pendingIce.current = []; clearTimeout(callTimer.current); setCall((current) => ({ ...current, status: "connected", connectedAt: Date.now() })); }
       if (signal.type === "ice") {
         const candidate = new RTCIceCandidate(signal.candidate);
-        if (peer.current.remoteDescription) await peer.current.addIceCandidate(candidate); else pendingIce.current.push(candidate);
+        if (peer.current.remoteDescription) await addCandidates(peer.current, [candidate]); else pendingIce.current.push(candidate);
       }
     };
     window.addEventListener("call:start", start); socket.on("call:signal", receive);
@@ -91,7 +97,7 @@ const CallManager = () => {
       setCall((current) => ({ ...current, status: "connecting" }));
       const pc = await makePeer(call.video, call.peerId);
       await pc.setRemoteDescription(new RTCSessionDescription(call.offer));
-      for (const candidate of pendingIce.current) await pc.addIceCandidate(candidate); pendingIce.current = [];
+      await addCandidates(pc, pendingIce.current); pendingIce.current = [];
       const answer = await pc.createAnswer(); await pc.setLocalDescription(answer);
       socket.emit("call:signal", { receiverId: call.peerId, signal: { type: "answer", sdp: answer } });
       clearTimeout(callTimer.current);
