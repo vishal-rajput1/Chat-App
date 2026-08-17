@@ -17,6 +17,17 @@ dotenv.config();
 const PORT = process.env.PORT;
 const __dirname = path.resolve();
 
+// Render terminates TLS at its load balancer and forwards the original protocol.
+app.set("trust proxy", 1);
+
+if (process.env.NODE_ENV === "production") {
+  app.use((req, res, next) => {
+    if (!req.secure) return res.redirect(301, `https://${req.get("host")}${req.originalUrl}`);
+    res.setHeader("Strict-Transport-Security", "max-age=31536000; includeSubDomains");
+    next();
+  });
+}
+
 app.use(express.json({ limit: "10mb" }));
 app.use(express.urlencoded({ limit: "10mb", extended: true }));
 app.use(cookieParser());
