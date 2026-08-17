@@ -1,25 +1,53 @@
-const CACHE_NAME = "chat-app-v1";
-const APP_SHELL = ["/", "/index.html", "/favicon.svg"];
+const CACHE_NAME = "chatty-v2";
+
+const APP_SHELL = [
+  "/",
+  "/index.html",
+  "/favicon.svg",
+];
 
 self.addEventListener("install", (event) => {
-  event.waitUntil(caches.open(CACHE_NAME).then((cache) => cache.addAll(APP_SHELL)));
+  event.waitUntil(
+    caches.open(CACHE_NAME).then((cache) => cache.addAll(APP_SHELL))
+  );
+
   self.skipWaiting();
 });
 
 self.addEventListener("activate", (event) => {
   event.waitUntil(
-    caches.keys().then((keys) => Promise.all(keys.filter((key) => key !== CACHE_NAME).map((key) => caches.delete(key))))
+    caches
+      .keys()
+      .then((keys) =>
+        Promise.all(
+          keys
+            .filter((key) => key !== CACHE_NAME)
+            .map((key) => caches.delete(key))
+        )
+      )
   );
+
   self.clients.claim();
 });
 
 self.addEventListener("fetch", (event) => {
   const { request } = event;
-  if (request.method !== "GET" || new URL(request.url).origin !== self.location.origin) return;
 
-  // Keep API calls and Socket.IO requests live; only app files are cached.
-  if (request.url.includes("/api/") || request.url.includes("/socket.io/")) return;
+  if (request.method !== "GET") return;
 
+  const url = new URL(request.url);
+
+  if (url.origin !== self.location.origin) return;
+
+  // Keep API and Socket.IO requests live.
+  if (
+    url.pathname.startsWith("/api/") ||
+    url.pathname.startsWith("/socket.io/")
+  ) {
+    return;
+  }
+
+  // Navigation requests.
   if (request.mode === "navigate") {
     event.respondWith(
       fetch(request).catch(() => caches.match("/index.html"))
@@ -27,10 +55,22 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
+  // Static assets.
   event.respondWith(
-    caches.match(request).then((cached) => cached || fetch(request).then((response) => {
-      if (response.ok) caches.open(CACHE_NAME).then((cache) => cache.put(request, response.clone()));
-      return response;
-    }))
+    caches.match(request).then((cached) => {
+      if (cached) return cached;
+
+      return fetch(request).then((response) => {
+        if (response.ok) {
+          const responseClone = response.clone();
+
+          caches.open(CACHE_NAME).then((cache) => {
+            cache.put(request, responseClone);
+          });
+        }
+
+        return response;
+      });
+    })
   );
 });
